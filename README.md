@@ -1,5 +1,7 @@
 # Flowline
 
+[![Flowline CI](https://github.com/YashAnand69/flowline/actions/workflows/ci.yml/badge.svg)](https://github.com/YashAnand69/flowline/actions/workflows/ci.yml)
+
 **Make work flow.** An open-source workflow automation engine with a visual editor, authenticated webhooks, extensible actions, and inspectable execution history.
 
 [Live workspace](https://flowline-yash.netlify.app) · [3D experience](https://flowline-yash.netlify.app/explore)
@@ -81,12 +83,13 @@ Netlify does not run an always-on Redis worker, so its adapter uses background f
 npx netlify login
 npx netlify sites:create
 # Set ENCRYPTION_KEY (64 hex characters) and RUNNER_SECRET (random 32+ bytes)
-# in Netlify → Project configuration → Environment variables, Functions scope.
+# in Netlify → Project configuration → Environment variables, production context.
+# Use Functions scope if your plan supports it; otherwise use the default scopes.
 npm run build
 npx netlify deploy --prod --dir=dist
 ```
 
-The supplied `netlify.toml` configures the SPA, API functions, security headers and Node version. Production Blobs data is scoped separately from deploy previews. Keep `ENCRYPTION_KEY` stable across deployments; replacing it makes existing saved credentials unreadable. Changing `RUNNER_SECRET` requires redeploying functions.
+The supplied `netlify.toml` configures the SPA, API functions, security headers and Node version. Production Blobs data is scoped separately from deploy previews. Keep `ENCRYPTION_KEY` stable across deployments; replacing it makes existing saved credentials unreadable. Changing `RUNNER_SECRET` requires redeploying functions. Verify that both keys actually persist in the production context before deployment. Never prefix these values with VITE_ or place them in netlify.toml. A deployment missing its required runtime configuration returns a clear 503 instead of accepting unusable workflows.
 
 ## Tests
 
