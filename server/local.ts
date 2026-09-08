@@ -3,6 +3,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { Queue, Worker } from 'bullmq';
+import { Redis } from 'ioredis';
 import { FileStorage, PostgresStorage } from './storage';
 import { handleApi, credentialsFor } from './api';
 import { executeRun } from './engine';
@@ -32,16 +33,22 @@ const execute = async (run: Run) => {
 };
 let queue: Queue | undefined;
 let worker: Worker | undefined;
+let producerRedis: Redis | undefined;
+let workerRedis: Redis | undefined;
 if (process.env.REDIS_URL) {
-  const url = new URL(process.env.REDIS_URL);
-  const connection = {
-    host: url.hostname,
-    port: Number(url.port) || 6379,
-    password: url.password || undefined,
-  };
-  queue = new Queue('flowline', { connection });
+  producerRedis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1 });
+  workerRedis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: null,
+  });
+  producerRedis.on('error', (e) =>
+    console.error('Queue connection:', e.message),
+  );
+  workerRedis.on('error', (e) =>
+    console.error('Worker connection:', e.message),
+  );
+  queue = new Queue('flowline', { connection: producerRedis });
   worker = new Worker('flowline', async (job) => execute(job.data), {
-    connection,
+    connection: workerRedis,
     concurrency: 4,
   });
   worker.on('error', (e) => console.error('Worker:', e.message));
@@ -93,14 +100,25 @@ app.use(express.static('dist'));
 app.get('/{*path}', (_req, res) =>
   res.sendFile(path.resolve('dist/index.html')),
 );
-const server = app.listen(Number(process.env.PORT) || 3001, '0.0.0.0', () =>
-  console.log(
-    `Flowline API listening on http://localhost:${process.env.PORT || 3001} (${queue ? 'Postgres + Redis queue' : 'local durable storage'})`,
-  ),
+const server = app.listen(
+  Number(process.env.PORT) || 3001,
+  '0.0.0.0',
+  (error?: Error) => {
+    if (error) {
+      console.error('Server could not start:', error.message);
+      process.exit(1);
+    }
+    console.log(
+      `Flowline API listening on http://localhost:${process.env.PORT || 3001} (${queue ? 'Postgres + Redis queue' : 'local durable storage'})`,
+    );
+  },
 );
 for (const signal of ['SIGTERM', 'SIGINT'])
-  process.on(signal, () => {
+  process.on(signal, async () => {
     server.close();
-    void worker?.close();
-    void queue?.close();
+    await worker?.close();
+    await queue?.close();
+    await producerRedis?.quit();
+    await workerRedis?.quit();
+    process.exit(0);
   });
