@@ -186,6 +186,7 @@ export default function AuthScreen({
           <p className="auth-legal">
             Google shares your name and email for sign-in. Flowline does not
             request access to your Gmail or Drive.
+            {' '}<a href="/privacy.html">Privacy notice</a>
           </p>
         </div>
       </section>
