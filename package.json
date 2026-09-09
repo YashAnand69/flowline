@@ -20,6 +20,7 @@
     "@netlify/blobs": "^11.0.3",
     "@netlify/functions": "^6.0.0",
     "@shadcn/react": "0.3.0",
+    "@supabase/supabase-js": "2.116.0",
     "@types/express": "^5.0.6",
     "@types/pg": "^8.23.1",
     "@types/three": "^0.185.4",

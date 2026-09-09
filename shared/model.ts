@@ -76,6 +76,9 @@ export type Workspace = {
   name: string;
   createdAt: string;
   recoveryHash: string;
+  googleUserId?: string;
+  email?: string;
+  displayName?: string;
 };
 export const pluginInfo: Record<
   Kind,
@@ -173,13 +176,11 @@ export function makeTemplate(index = 0): Definition {
       ][index] || '',
     active: false,
     nodes,
-    edges: nodes
-      .slice(1)
-      .map((n, i) => ({
-        id: `e-${nodes[i].id}-${n.id}`,
-        source: nodes[i].id,
-        target: n.id,
-      })),
+    edges: nodes.slice(1).map((n, i) => ({
+      id: `e-${nodes[i].id}-${n.id}`,
+      source: nodes[i].id,
+      target: n.id,
+    })),
   };
 }
 export const samplePayload = {

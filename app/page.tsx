@@ -1,3 +1,5 @@
+import AuthScreen, { GoogleMark, signInWithGoogle } from './AuthScreen';
+import { ApiError } from './client';
 import {
   useState,
   useEffect,
@@ -73,17 +75,20 @@ type View =
   | 'templates'
   | 'docs'
   | 'settings';
-type Workspace = { id: string; name: string; createdAt: string };
+type Workspace = {
+  id: string;
+  name: string;
+  createdAt: string;
+  account?: { provider: string; email: string; name: string } | null;
+};
 let boot: Promise<any> | null = null;
 async function bootstrap() {
+  const config = await api('auth/config');
   try {
-    return await api('session');
+    return { ...(await api('session')), config };
   } catch (e) {
-    if (
-      (e as Error).message.includes('workspace') ||
-      (e as Error).message.includes('session')
-    )
-      return api('session', post({}));
+    if (e instanceof ApiError && e.status === 401)
+      return { workspace: null, config };
     throw e;
   }
 }
@@ -110,6 +115,10 @@ const templates = [
 export default function App() {
   const [view, setView] = useState<View>('workflows'),
     [workspace, setWorkspace] = useState<Workspace | null>(null),
+    [authConfig, setAuthConfig] = useState({
+      google: false,
+      database: 'local',
+    }),
     [workflows, setWorkflows] = useState<Workflow[]>([]),
     [runs, setRuns] = useState<Run[]>([]),
     [integrations, setIntegrations] = useState<
@@ -153,8 +162,18 @@ export default function App() {
     boot
       .then(async (data) => {
         if (!alive) return;
+        setAuthConfig(data.config);
+        if (!data.workspace) return;
         setWorkspace(data.workspace);
         setWorkspaceName(data.workspace.name);
+        const params = new URLSearchParams(location.search);
+        if (params.has('auth_error'))
+          toast.error(
+            'Google could not be connected. It may already belong to another workspace.',
+          );
+        if (params.has('signed_in')) toast.success('Signed in with Google');
+        if (params.has('auth_error') || params.has('signed_in'))
+          history.replaceState({}, '', location.pathname);
         if (data.recoveryKey) {
           setRecovery(data.recoveryKey);
           setRecoveryOpen(true);
@@ -500,6 +519,40 @@ export default function App() {
         <Toaster position="bottom-right" />
       </>
     );
+  if (!workspace)
+    return (
+      <>
+        <AuthScreen
+          google={authConfig.google}
+          loading={loading}
+          error={
+            error ||
+            (new URLSearchParams(location.search).has('auth_error')
+              ? 'Google sign-in was cancelled, expired, or the account is linked elsewhere. Try again, or use your recovery key.'
+              : '')
+          }
+          onExplore={() => {
+            setExplore(true);
+            history.replaceState({}, '', '/explore');
+          }}
+          onSession={async (data) => {
+            setRecovery(data.recoveryKey || '');
+            setWorkspace(data.workspace);
+            setWorkspaceName(data.workspace.name);
+            setDisconnected(false);
+            setError('');
+            if (data.recoveryKey) {
+              setRecovery(data.recoveryKey);
+              setRecoveryOpen(true);
+            }
+            history.replaceState({}, '', '/');
+            boot = null;
+            await refresh();
+          }}
+        />
+        <Toaster richColors position="bottom-right" />
+      </>
+    );
   if (editing)
     return (
       <>
@@ -627,7 +680,7 @@ export default function App() {
           <button className="profile" onClick={() => navigate('settings')}>
             <span className="avatar lime">{workspace?.name[0] || 'P'}</span>
             <div>
-              Your workspace
+              {workspace?.account?.name || 'Your workspace'}
               <small>{workspace ? 'Saved on the server' : 'Connecting…'}</small>
             </div>
             <span className="online-dot" />
@@ -1163,6 +1216,40 @@ export default function App() {
                     description="Manage workspace details, recovery, and your data."
                   />
                   <section className="settings-card">
+                    <h3>
+                      {workspace.account
+                        ? 'Connected to Google'
+                        : 'Sign in from anywhere.'}
+                    </h3>
+                    <p>
+                      {workspace.account
+                        ? workspace.account.email
+                        : 'Connect your Google account to this workspace. Your existing workflows and integrations stay right here.'}
+                    </p>
+                    {!workspace.account && authConfig.google && (
+                      <button
+                        className="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            await signInWithGoogle(true);
+                          } catch (e) {
+                            toast.error((e as Error).message);
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        <GoogleMark /> Connect Google account
+                      </button>
+                    )}
+                    <small>
+                      {authConfig.database === 'supabase-postgres'
+                        ? 'Workspace data is stored in PostgreSQL.'
+                        : 'Your workspace is saved on this server.'}
+                    </small>
+                  </section>
+                  <section className="settings-card">
                     <h3>Workspace details</h3>
                     <p>A name that feels like you.</p>
                     <Field label="Workspace name">
@@ -1276,17 +1363,19 @@ export default function App() {
                         onClick={async () => {
                           await api('session', { method: 'DELETE' });
                           setDisconnected(true);
+                          setRecovery('');
+                          setRecoveryOpen(false);
                           setWorkspace(null);
                           setWorkflows([]);
                           setRuns([]);
                           setIntegrations([]);
                           boot = null;
                           toast.success(
-                            'Workspace locked. Use your recovery key to return.',
+                            'Signed out. Sign in again to return to your workspace.',
                           );
                         }}
                       >
-                        <LogOut size={16} /> Lock workspace
+                        <LogOut size={16} /> Sign out
                       </button>
                     </div>
                   </section>
@@ -1434,6 +1523,7 @@ export default function App() {
                 'session',
                 post({ recoveryKey: restoreKey.trim() }),
               );
+              setRecovery(data.recoveryKey || '');
               setWorkspace(data.workspace);
               setWorkspaceName(data.workspace.name);
               setDisconnected(false);

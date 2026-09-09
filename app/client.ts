@@ -1,3 +1,11 @@
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+  }
+}
 export async function api<T = any>(
   path: string,
   options: RequestInit = {},
@@ -14,7 +22,10 @@ export async function api<T = any>(
     throw new Error('The server is unavailable. Please try again in a moment.');
   }
   if (!response.ok)
-    throw new Error(data.error || 'The request could not be completed.');
+    throw new ApiError(
+      data.error || 'The request could not be completed.',
+      response.status,
+    );
   return data;
 }
 export const post = (body: unknown) => ({

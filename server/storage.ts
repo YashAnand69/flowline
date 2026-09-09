@@ -10,6 +10,10 @@ import {
 import path from 'node:path';
 import { Pool } from 'pg';
 export interface Storage {
+  bindGoogle?(
+    profile: import('./google').GoogleProfile,
+    workspaceId?: string,
+  ): Promise<import('../shared/model').Workspace>;
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;

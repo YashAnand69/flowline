@@ -26,3 +26,14 @@ Webhook authorization accepts `X-Flowline-Secret: <workflow secret>` or `X-Hub-S
 Errors use `{error: "Readable explanation"}`. Missing workspace resources return 404. Stale workflow versions return 409. Quotas return 429. Worker dispatch failure returns 503 and persists a failed run.
 
 Workflow exports contain name, description, active=false, nodes and edges; import always produces a new paused workflow with a fresh secret. See `shared/model.ts` for the complete graph schema.
+
+## Google authentication
+
+- `GET /api/auth/config`: returns Google availability and the configured database type; no secrets.
+- `POST /api/auth/google` with `{}`: starts PKCE login, sets an encrypted HttpOnly cookie and returns the provider URL.
+- `POST /api/auth/google` with `{"link":true}`: requires the current workspace session and starts explicit Google linking.
+- `GET /api/auth/callback?code=...`: exchanges the code, verifies the Google user, binds the workspace and sets an application session. Returns a fixed same-origin redirect.
+- `GET /api/session`: includes a display-only `workspace.account` object for Google-linked workspaces.
+- `DELETE /api/session`: invalidates the current application session.
+
+See [Google authentication](GOOGLE-AUTH.md) for provider setup and security details.

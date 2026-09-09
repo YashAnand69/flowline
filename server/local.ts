@@ -5,6 +5,7 @@ import path from 'node:path';
 import { Queue, Worker } from 'bullmq';
 import { Redis } from 'ioredis';
 import { FileStorage, PostgresStorage } from './storage';
+import { SupabaseStorage } from './supabase-storage';
 import { handleApi, credentialsFor } from './api';
 import { executeRun } from './engine';
 import type { Run } from '../shared/model';
@@ -21,9 +22,16 @@ if (!key) {
     });
   }
 }
-const store = process.env.DATABASE_URL
-  ? new PostgresStorage(process.env.DATABASE_URL)
-  : new FileStorage(dataDir);
+const store =
+  process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
+    ? new SupabaseStorage(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_SECRET_KEY,
+        process.env.DATABASE_SCOPE || 'development',
+      )
+    : process.env.DATABASE_URL
+      ? new PostgresStorage(process.env.DATABASE_URL)
+      : new FileStorage(dataDir);
 const execute = async (run: Run) => {
   const current = await store.get<Run>(`runs/${run.owner}/${run.id}`);
   if (!current || ['success', 'failed'].includes(current.status)) return;
@@ -87,10 +95,29 @@ app.use('/api', async (req, res) => {
       store,
       encryptionKey: key!,
       origin,
+      database:
+        store instanceof SupabaseStorage
+          ? 'supabase-postgres'
+          : process.env.DATABASE_URL
+            ? 'postgres'
+            : 'local',
+      google:
+        process.env.GOOGLE_AUTH_ENABLED === 'true' &&
+        process.env.SUPABASE_URL &&
+        process.env.SUPABASE_PUBLISHABLE_KEY
+          ? {
+              url: process.env.SUPABASE_URL,
+              publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY,
+            }
+          : undefined,
       dispatch,
     });
     res.status(result.status);
-    result.headers.forEach((v, k) => res.setHeader(k, v));
+    result.headers.forEach((v, k) => {
+      if (k !== 'set-cookie') res.setHeader(k, v);
+    });
+    if (result.headers.getSetCookie().length)
+      res.setHeader('Set-Cookie', result.headers.getSetCookie());
     res.send(Buffer.from(await result.arrayBuffer()));
   } catch {
     res.status(500).json({ error: 'Server error.' });

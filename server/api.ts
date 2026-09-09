@@ -1,3 +1,9 @@
+import {
+  beginGoogle,
+  finishGoogle,
+  oauthCookie,
+  type GoogleConfig,
+} from './google';
 import { z } from 'zod';
 import type { Storage } from './storage';
 import {
@@ -22,6 +28,9 @@ export type Environment = {
   store: Storage;
   encryptionKey: string;
   origin?: string;
+  google?: GoogleConfig;
+  database?: string;
+  readOnly?: boolean;
   dispatch: (run: Run) => Promise<void>;
 };
 class HttpError extends Error {
@@ -45,6 +54,16 @@ function json(
       ...extra,
     },
   });
+}
+function safeWorkspace(w: Workspace) {
+  return {
+    id: w.id,
+    name: w.name,
+    createdAt: w.createdAt,
+    account: w.googleUserId
+      ? { provider: 'google', email: w.email, name: w.displayName }
+      : null,
+  };
 }
 function safeFlow(w: Workflow) {
   const { owner, ...flow } = w;
@@ -103,11 +122,7 @@ async function startSession(
   });
   return json(
     {
-      workspace: {
-        id: workspace.id,
-        name: workspace.name,
-        createdAt: workspace.createdAt,
-      },
+      workspace: safeWorkspace(workspace),
       recoveryKey,
     },
     200,
@@ -178,6 +193,11 @@ export async function handleApi(
         .split('/')
         .filter(Boolean);
     const [resource, id, action] = parts;
+    if (env.readOnly && !['GET', 'HEAD'].includes(req.method))
+      throw new HttpError(
+        503,
+        'Workspace updates are briefly paused for a database upgrade. Please try again shortly.',
+      );
     const origin = env.origin ?? url.origin,
       secure = origin.startsWith('https:');
     if (req.method === 'OPTIONS') return new Response(null, { status: 405 });
@@ -193,7 +213,62 @@ export async function handleApi(
     }
     if (resource === 'health' && req.method === 'GET') {
       await env.store.get('_health');
-      return json({ status: 'ok', service: 'flowline', version: '1.0.0' });
+      return json({
+        status: 'ok',
+        service: 'flowline',
+        version: '1.1.0',
+        database: env.database || 'local',
+      });
+    }
+    if (resource === 'auth' && id === 'config' && req.method === 'GET') {
+      return json({
+        google: Boolean(env.google && env.store.bindGoogle),
+        database: env.database || 'local',
+      });
+    }
+    if (resource === 'auth' && id === 'google' && req.method === 'POST') {
+      if (!env.google || !env.store.bindGoogle)
+        throw new HttpError(503, 'Google sign-in is not configured yet.');
+      const data = JSON.parse((await readBody(req)) || '{}');
+      const workspace = data.link ? await auth(req, env) : undefined;
+      if (workspace?.googleUserId)
+        throw new HttpError(
+          409,
+          'This workspace already has a Google account.',
+        );
+      const pending = await beginGoogle(
+        env.google,
+        origin,
+        env.encryptionKey,
+        workspace?.id,
+      );
+      return json({ url: pending.url }, 200, { 'Set-Cookie': pending.cookie });
+    }
+    if (resource === 'auth' && id === 'callback' && req.method === 'GET') {
+      const headers = new Headers({
+        'Cache-Control': 'no-store',
+        'Referrer-Policy': 'no-referrer',
+      });
+      headers.append('Set-Cookie', oauthCookie('', secure));
+      try {
+        if (!env.google || !env.store.bindGoogle)
+          throw new Error('Google sign-in is not configured.');
+        const { profile, workspaceId } = await finishGoogle(
+          env.google,
+          req,
+          env.encryptionKey,
+        );
+        // Linking requires the original authenticated workspace session at callback too.
+        if (workspaceId && (await auth(req, env)).id !== workspaceId)
+          throw new Error('Your workspace session changed.');
+        const workspace = await env.store.bindGoogle(profile, workspaceId);
+        const session = await startSession(workspace, env, secure);
+        headers.append('Set-Cookie', session.headers.get('set-cookie')!);
+        headers.set('Location', `${origin}/?signed_in=google`);
+      } catch {
+        headers.set('Location', `${origin}/?auth_error=google`);
+      }
+      return new Response(null, { status: 303, headers });
     }
     if (resource === 'session') {
       if (req.method === 'POST') {
@@ -224,7 +299,7 @@ export async function handleApi(
       if (req.method === 'GET') {
         const w = await auth(req, env);
         return json({
-          workspace: { id: w.id, name: w.name, createdAt: w.createdAt },
+          workspace: safeWorkspace(w),
         });
       }
       if (req.method === 'DELETE') {
