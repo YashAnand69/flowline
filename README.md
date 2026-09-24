@@ -109,7 +109,7 @@ TEST_ORIGIN=https://your-site.netlify.app node tests/smoke.mjs
 
 The shared plugin contracts, graph validation, branch skipping, retry exhaustion, preview behavior, authentication, workspace isolation, recovery, signature validation, encrypted credentials and stale-edit protection are tested. CI also boots Docker Compose and runs a real webhook through Postgres and Redis to completion.
 
-## Deliberate boundaries
+## Deliberate boundaries.
 
 - Workspaces support 30 workflows, 30 nodes per graph, 200 runs per day and five concurrent recent runs. These application quotas are best-effort under concurrent requests; they are not a billing or hard security boundary.
 - The UI returns up to 100 recent runs. History is retained; operators should implement retention for high-volume installations.
