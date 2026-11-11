@@ -2,7 +2,7 @@
 
 [![Flowline CI](https://github.com/YashAnand69/flowline/actions/workflows/ci.yml/badge.svg)](https://github.com/YashAnand69/flowline/actions/workflows/ci.yml)
 
-**Make work flow.** An open-source workflow automation engine with a visual editor, authenticated webhooks, extensible actions, and inspectable execution history.
+**Make work flow.** An open-source workflow automation engine with a visual editor, authenticated webhooks, extensible actions, and inspectable execution history
 
 [Live workspace](https://flowline-yash.netlify.app) · [3D experience](https://flowline-yash.netlify.app/explore)
 
