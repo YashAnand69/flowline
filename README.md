@@ -6,7 +6,7 @@
 
 [Live workspace](https://flowline-yash.netlify.app) · [3D experience](https://flowline-yash.netlify.app/explore)
 
-A React Flow workspace for getting things done, paired with an original interactive Three.js scroll experience at `/explore`.
+A React Flow workspace for getting things done, paired with an original interactive Three.js scroll experience at `/explore`
 
 ## What works
 
