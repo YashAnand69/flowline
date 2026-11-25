@@ -7,6 +7,8 @@
 5. Run `npm run build`. For infrastructure changes, run `docker compose up --build --wait` and `node tests/smoke.mjs`.
 6. Open a pull request describing the problem, the resulting behavior, and what you verified.
 
+For local setup and smoke-test commands, see the [README](README.md). For API behavior and request examples, see the [API guide](docs/API.md).
+
 Never commit real workspace data, recovery keys, provider credentials or encryption keys. Test external actions with injected fetchers or preview mode. Read [the plugin guide](docs/PLUGINS.md) before adding a connector.
 
 Issues with clear reproduction steps and expected/actual behavior are welcome. Security concerns should be reported privately through the maintainer's GitHub profile; do not post working credentials or exploits against the hosted instance.
